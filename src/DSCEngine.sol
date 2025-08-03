@@ -27,6 +27,21 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
     mapping (address => mapping(address => uint256)) public s_amountOfCollateralDepositedByUser;
     mapping (address => uint256) public s_DSCMintedByUser;
 
+    /**
+     * @notice LIQUIDATION_THRESHOLD: determines what portion (%) of the collateral is a 'safe' backing for the loan
+     * for every $1000 dollar as collateral, you can borrow up to $500 worth of asset. (LT=50)
+     * If you buy more than $50 worth of asset, you are at a risk of getting your collateral liquidated.
+     * @notice LIQUIDATED collateral represents your debt position: collateral is sold or auctioned off 
+     * to repay your debt.
+     * Now suppose your collateral value initially was 10 ETH = $1000, (LT=50), and you borrow ASSET = $420.
+     * this means your health factor = ($1000*50/100)/420 = 1.18
+     * Now suppose 10 ETH = $800, (LT=50), now your health factor becomes: 0.95
+     * What happens now? A liquidator (a bot or an arbitrageur) repays a part/all of your collateral debt.
+     * How would this Help them???
+     * suppose the liquidator pays $210 to the protocol, he shall now receive the same worth of eth 
+     * with 10% incentive ($231). 
+     */
+
     address[] private s_collateralTokens;
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
@@ -146,5 +161,4 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
             revert DSCEnginer__breaksHealthFactor();
         }
     }
-
 }

@@ -4,7 +4,7 @@ pragma solidity ^0.8.30;
 import {Test, console} from "../../lib/forge-std/src/Test.sol";
 import {DecentralizedStablecoin} from "../../src/DecentralizedStablecoin.sol";
 import {DeployStablecoin} from "../../script/DeployStablecoin.s.sol";
-import {DSCEngine} from "../../src/DSCEngine.sol";
+import {DSCEngine, EngineErrors} from "../../src/DSCEngine.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {ERC20Mock} from "../mocks/ERC20Mock.sol";
 
@@ -36,6 +36,9 @@ contract StablecoinTest is Test {
         (wethUsdPriceFeed, wbtcUsdPriceFeed, weth, wbtc, ) = config.activeNetworkConfig();
 
         owner = address(engine);
+
+        vm.deal(USER, AMOUNT);
+        ERC20Mock(weth).mint(USER, VALID_AMOUNT);
     }
     /////////////////////////
     // ERC20 test        ////
@@ -78,15 +81,29 @@ contract StablecoinTest is Test {
     /////////////////////////////////////
 
     function testRevertsIfCollateralIsZero() external {
-        vm.prank(USER);
+        vm.startPrank(USER);
         // ERC20Mock(weth).approve(address(engine), VALID_AMOUNT);
-        vm.expectRevert();
+        vm.expectRevert(EngineErrors.DSCEngine__NonZeroAmountRequired.selector);
+        // ERC20Mock(weth).approve(address(engine), VALID_AMOUNT);
         engine.depositCollateral(weth, 0);
+        vm.stopPrank();
+    }
+
+    function testUserCanActuallyDepositCollateral() external {
+        vm.startPrank(USER);
+        // ERC20Mock(weth).approve(address(engine), VALID_AMOUNT);
+        // vm.expectRevert(EngineErrors.DSCEngine__NonZeroAmountRequired.selector);
+        ERC20Mock(weth).approve(address(engine), VALID_AMOUNT);
+        engine.depositCollateral(weth, VALID_AMOUNT);
+        vm.stopPrank();
     }
 
     function testAcceptedTokenIsDepositedAsCollateral() external {
         vm.prank(USER);
-        engine.depositCollateral(depositToken, VALID_AMOUNT);
+        vm.expectRevert(EngineErrors.DSCEngine__noPriceFeedForTheToken.selector);
+        engine.depositCollateral(address(10), VALID_AMOUNT);
     }
+
+    function 
 
 }
