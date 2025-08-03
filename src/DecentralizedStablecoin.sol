@@ -30,6 +30,8 @@ contract DecentralizedStablecoin is ERC20Burnable, Ownable {
         require(balance>= _amount, InsufficientBalance());
         
         super.burn(_amount);
+
+        // return true;
     }
 
     function mint(address _to, uint256 _amount) public onlyOwner returns (bool){

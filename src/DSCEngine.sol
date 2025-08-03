@@ -14,10 +14,14 @@ abstract contract EngineErrors {
     error DSCEngine__DepositFailed();
     error DSCEnginer__breaksHealthFactor();
     error DSCEngine__mintingFailed();
+    error DSCEngine__redeemingFailed();
+    error DSCEngine__transferFailed();
+    error DSCEngine__burningFailed();
 }
 
 abstract contract EngineEvents {
     event NewCollateralDeposited(address user, address tokenDeposited, uint256 amount);
+    event CollateralRedeemed(address indexed, address, uint256);
 }
 
 contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
@@ -106,6 +110,48 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
     // External     /////////
     /////////////////////////
 
+    /**
+     * a user can redeem their collateral only if:
+     * they have a health factor>1 after the collateral is pulled
+     * 
+     */
+
+    function redeemCollateral(
+        address collateralTokenAddress, 
+        uint256 amountToRedeem) 
+        external override 
+        nonZeroAmount(amountToRedeem)
+        nonReentrant
+        {
+            s_amountOfCollateralDepositedByUser[msg.sender][collateralTokenAddress]-=amountToRedeem;
+            emit CollateralRedeemed(msg.sender, collateralTokenAddress,amountToRedeem);
+
+            (bool success)= IERC20(collateralTokenAddress).transferFrom(
+                address(this), msg.sender, amountToRedeem
+                );
+            require(success, DSCEngine__redeemingFailed());
+
+            _revertIfHealthFactorIsBroken(msg.sender);
+    }
+
+    function redeemCollateralBurnDSC(
+        address collateralTokenAddress,
+        uint256 amountToRedeem
+        ) 
+        external override 
+        nonZeroAmount(amountToRedeem)
+    {
+        this.redeemCollateral(
+            collateralTokenAddress,
+            amountToRedeem
+        );
+
+        this.burnDSC(
+            amountToRedeem
+        );
+    }
+
+
     function mintDSCByCollateral(
         address collateralTokenAddress,
         uint256 amountOfCollateral,
@@ -152,6 +198,23 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         require (minted, DSCEngine__mintingFailed());
     }
 
+    function burnDSC(
+        uint256 amountToBeBurned
+        )
+        external override 
+        nonZeroAmount(amountToBeBurned)
+        nonReentrant
+    {
+        s_DSCMintedByUser[msg.sender]-= amountToBeBurned;
+        _revertIfHealthFactorIsBroken(msg.sender);
+
+        bool success = i_dsc.transferFrom(msg.sender, address(this), amountToBeBurned);
+        require (success, DSCEngine__transferFailed());
+
+        i_dsc.burn(amountToBeBurned);
+    }
+
+    
     ////////////////////////
     // Private & Internal //
     ////////////////////////

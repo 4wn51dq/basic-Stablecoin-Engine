@@ -27,15 +27,15 @@ interface IDSCEngine {
      * @param collateralAmount is the amount of collateral to be deposited.
      */
 
-    // function redeemCollateralForDSC(address collateralTokenAddress, uint256 collateralAmount) external ;
+    function redeemCollateralBurnDSC(address collateralTokenAddress, uint256 collateralAmount) external ;
 
     function depositCollateral(address collateralTokenAddress, uint256 collateralAmount) external ;
 
-    //function redeemCollateral() external ;
+    function redeemCollateral(address collateralTokenAddress, uint256 amountToRedeem) external ;
 
     function mintDSC(uint256 amountToBeMinted) external ;
 
-    // function burnDSC() external ;
+    function burnDSC(uint256 amountToBeBurned) external ;
 
     // function liquidate() external ;
 
