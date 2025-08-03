@@ -16,7 +16,11 @@ pragma solidity ^0.8.30;
 
 interface IDSCEngine {
 
-    function mintDSCByCollateral() external ;
+    function mintDSCByCollateral(
+        address collateralTokenAddress,
+        uint256 amountCollateral,
+        uint256 amountDscToMint
+    ) external ;
 
     /*
      * @param collateralTokenAddress is the address of the token that can be taken as collateral;

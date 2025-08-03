@@ -103,7 +103,4 @@ contract StablecoinTest is Test {
         vm.expectRevert(EngineErrors.DSCEngine__noPriceFeedForTheToken.selector);
         engine.depositCollateral(address(10), VALID_AMOUNT);
     }
-
-    function 
-
 }

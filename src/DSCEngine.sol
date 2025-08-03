@@ -40,6 +40,8 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
      * How would this Help them???
      * suppose the liquidator pays $210 to the protocol, he shall now receive the same worth of eth 
      * with 10% incentive ($231). 
+     * @notice MINIMUM_OVERCOLLATERALIZATION_RATIO = 1/LIQUIDATION_THRESHOLD(%)
+     * You must have at least 2x the value of your debt in collateral to avoid liquidation.
      */
 
     address[] private s_collateralTokens;
@@ -80,7 +82,7 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
     }
 
     /////////////////////////
-    // Public and External //
+    // Public       /////////
     /////////////////////////
 
     function getCollateralValue(address user) public view override returns (uint256 valueInUSD) {
@@ -100,8 +102,25 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         return ((uint256(price)*ADDITIONAL_FEED_PRECISION)*amount)/PRECISION;
     }
 
-    function mintDSCByCollateral() external override {
+    /////////////////////////
+    // External     /////////
+    /////////////////////////
 
+    function mintDSCByCollateral(
+        address collateralTokenAddress,
+        uint256 amountOfCollateral,
+        uint256 amountDscToMint
+    ) 
+        external override 
+        nonReentrant {
+        this.depositCollateral(
+            collateralTokenAddress,
+            amountOfCollateral
+        );
+
+        this.mintDSC(
+            amountDscToMint
+        );
     }
 
     function depositCollateral(
