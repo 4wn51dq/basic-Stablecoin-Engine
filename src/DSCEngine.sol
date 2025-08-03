@@ -42,7 +42,7 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
     ) {
         require (tokenAddresses.length == priceFeedAddresses.length, DSCEngine__tokensAndPriceFeedsAreNotMatched());
 
-        for (uint256 i=0; i<= tokenAddresses.length; i++) {
+        for (uint256 i=0; i< tokenAddresses.length; i++) {
             s_tokenPriceFeed[tokenAddresses[i]] = priceFeedAddresses[i];
             s_collateralTokens.push(tokenAddresses[i]);
         }
@@ -55,7 +55,7 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
     /////////////////////////
 
     modifier nonZeroAmount(uint256 amount) {
-        require (amount>=0, DSCEngine__NonZeroAmountRequired());
+        require (amount>0, DSCEngine__NonZeroAmountRequired());
         _;
     }
 

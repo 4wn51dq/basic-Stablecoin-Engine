@@ -19,14 +19,14 @@ contract DecentralizedStablecoin is ERC20Burnable, Ownable {
     error amountNotBurnable();
     error InsufficientBalance();
 
-    constructor() ERC20("Decentralized stablecoin", "DSC") Ownable(address(this)){
+    constructor() ERC20("Decentralized stablecoin", "DSC") Ownable(msg.sender){
         
     }
 
     function burn(uint256 _amount) public override onlyOwner {
         uint256 balance = balanceOf(msg.sender);
 
-        require(_amount>=0, amountNotBurnable());
+        require(_amount>0, amountNotBurnable());
         require(balance>= _amount, InsufficientBalance());
         
         super.burn(_amount);
