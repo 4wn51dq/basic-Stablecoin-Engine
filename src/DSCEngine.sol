@@ -17,6 +17,7 @@ abstract contract EngineErrors {
     error DSCEngine__redeemingFailed();
     error DSCEngine__transferFailed();
     error DSCEngine__burningFailed();
+    error DSCEngine__HealthFactorNonLiquidatable();
 }
 
 abstract contract EngineEvents {
@@ -46,6 +47,20 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
      * with 10% incentive ($231). 
      * @notice MINIMUM_OVERCOLLATERALIZATION_RATIO = 1/LIQUIDATION_THRESHOLD(%)
      * You must have at least 2x the value of your debt in collateral to avoid liquidation.
+     *
+     * suppose: $1000 worth ETH backs $500 dollar worth stablecoin
+     * now ETH price drops to $200, price of stablecoin is no more worth $1 !!
+     * so we need to make sure we remove the people's position in this system if the price of the collateral tanks.
+     * 
+     * @notice if someone is undercolateralized, liquidate them, pay their debt, and get their collateral asset. 
+     * thats free money for liquidators. 
+     * 
+     * liquidator pays off entire debt: $500, but will they? nope. they will be in a $300 loss in this case, 
+     * in case of debt owed> collateral value, and cases of crashing prices, the system has to use emergency measures!
+     * roughly 200% overcollateralized protocol helps avoid this too.
+     *
+     * but if the price only dropped to $800, and the user is undercollateralized, liquidator pays off $500 debt, 
+     * they get $300 profit via the collateral asset. 
      */
 
     address[] private s_collateralTokens;
@@ -53,6 +68,8 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50;
     uint256 private constant LIQUIDATION_PRECISION =100;
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
+    uint256 private constant LIQUIDATION_BONUS = 10;
 
     DecentralizedStablecoin private i_dsc;
 
@@ -106,6 +123,16 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         return ((uint256(price)*ADDITIONAL_FEED_PRECISION)*amount)/PRECISION;
     }
 
+    function getHealthFactor(address user) public view override returns (uint256) {
+        return _healthFactor(user);
+    }
+
+    function getTokenAmountFromUsd(address tokenAddress, uint256 usdAmountInWei) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_tokenPriceFeed[tokenAddress]);
+        (,int256 price,,,) = priceFeed.latestRoundData();
+        return (usdAmountInWei*PRECISION)/(uint256(price)*ADDITIONAL_FEED_PRECISION);
+    }
+
     /////////////////////////
     // External     /////////
     /////////////////////////
@@ -114,7 +141,37 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
      * a user can redeem their collateral only if:
      * they have a health factor>1 after the collateral is pulled
      * 
+     * @notice we need a method by which another user can liquidate those 
+     * unhealthy positions to secure the value of the stablecoin.
+     * @notice Users who assist the protocol by liquidating unhealthy positions will be rewarded with the
+     * collateral for the position they've closed, which will exceed the value of the DSC burnt by virtue 
+     * of our liquidation threshold.
+     *
+     * param: collateralTokenAddress is the erc20 collateral address to liquidate
+     * param: user is the address with broken health factor
+     * param: debtToCover is the amount of money (of the debt portion of user) the liquidator wants to pay.
+     * debtToCover will also be the amount of dsc that will be burned to improve the user's health factor
+     * 
+     * @notice 10% liquidation bonus 
+     * @notice the function assumes the protocol is roughly 200% overcollateralized.
+     * 
      */
+
+    function liquidate(
+        address collateralTokenAddress,
+        address user,
+        uint256 debtToCover) 
+        nonZeroAmount(debtToCover)
+        nonReentrant
+        external override 
+    {
+        uint256 startingUserHF = _healthFactor(user);
+        require (startingUserHF <= MIN_HEALTH_FACTOR, DSCEngine__HealthFactorNonLiquidatable());
+
+        uint256 tokenAmountFromDebtToCover = getTokenAmountFromUsd(collateralTokenAddress, debtToCover);
+        uint256 bonusCollateral = (tokenAmountFromDebtToCover*LIQUIDATION_BONUS)/LIQUIDATION_PRECISION;
+        uint256 totalCollateralToRedeem = tokenAmountFromDebtToCover + bonusCollateral;
+    }
 
     function redeemCollateral(
         address collateralTokenAddress, 
@@ -239,7 +296,7 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
 
     function _revertIfHealthFactorIsBroken(address user) internal view {
         uint256 userHealthFactor = _healthFactor(user);
-        if (userHealthFactor < 1) {
+        if (userHealthFactor < MIN_HEALTH_FACTOR) {
             revert DSCEnginer__breaksHealthFactor();
         }
     }

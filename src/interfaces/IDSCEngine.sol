@@ -37,9 +37,9 @@ interface IDSCEngine {
 
     function burnDSC(uint256 amountToBeBurned) external ;
 
-    // function liquidate() external ;
+    function liquidate(address collateralTokenAddress, address user, uint256 debtToRepay) external ;
 
-    // function getHealthFactor() external ;
+    function getHealthFactor(address user) external returns (uint256);
 
     /**
     function revertIfHealthFactorIsBroken(address user) external ;
