@@ -18,11 +18,13 @@ abstract contract EngineErrors {
     error DSCEngine__transferFailed();
     error DSCEngine__burningFailed();
     error DSCEngine__HealthFactorNonLiquidatable();
+    error DSCEngine__HealthFactorNotImproved();
 }
 
 abstract contract EngineEvents {
     event NewCollateralDeposited(address user, address tokenDeposited, uint256 amount);
     event CollateralRedeemed(address indexed, address, uint256);
+    event _CollateralRedeemed(address from, address to, address collateralTokenAddress, uint256 amount);
 }
 
 contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
@@ -133,6 +135,21 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         return (usdAmountInWei*PRECISION)/(uint256(price)*ADDITIONAL_FEED_PRECISION);
     }
 
+    function _redeemCollateral(
+        address collateralTokenAddress, 
+        uint256 amountToRedeem,
+        address from,
+        address to) 
+        public override nonZeroAmount(amountToRedeem) nonReentrant {
+            s_amountOfCollateralDepositedByUser[from][collateralTokenAddress]-=amountToRedeem;
+            emit _CollateralRedeemed(from, to, collateralTokenAddress,amountToRedeem);
+
+            (bool success)= IERC20(collateralTokenAddress).transferFrom(
+                from, to, amountToRedeem
+                );
+            require(success, DSCEngine__redeemingFailed());
+        }
+
     /////////////////////////
     // External     /////////
     /////////////////////////
@@ -155,6 +172,7 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
      * @notice 10% liquidation bonus 
      * @notice the function assumes the protocol is roughly 200% overcollateralized.
      * 
+     * @dev we should also revert lastly if the liquidator's health factor is broken! 
      */
 
     function liquidate(
@@ -171,6 +189,16 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         uint256 tokenAmountFromDebtToCover = getTokenAmountFromUsd(collateralTokenAddress, debtToCover);
         uint256 bonusCollateral = (tokenAmountFromDebtToCover*LIQUIDATION_BONUS)/LIQUIDATION_PRECISION;
         uint256 totalCollateralToRedeem = tokenAmountFromDebtToCover + bonusCollateral;
+
+        // redeem to whoever is calling liquidate
+
+        _redeemCollateral(collateralTokenAddress, totalCollateralToRedeem, user, msg.sender);
+        _burnDSC(debtToCover, user, msg.sender);
+
+        uint256 endingUserHF = _healthFactor(user);
+        require (endingUserHF>= startingUserHF, DSCEngine__HealthFactorNotImproved());
+
+        _revertIfHealthFactorIsBroken(msg.sender);
     }
 
     function redeemCollateral(
@@ -180,13 +208,7 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         nonZeroAmount(amountToRedeem)
         nonReentrant
         {
-            s_amountOfCollateralDepositedByUser[msg.sender][collateralTokenAddress]-=amountToRedeem;
-            emit CollateralRedeemed(msg.sender, collateralTokenAddress,amountToRedeem);
-
-            (bool success)= IERC20(collateralTokenAddress).transferFrom(
-                address(this), msg.sender, amountToRedeem
-                );
-            require(success, DSCEngine__redeemingFailed());
+            _redeemCollateral(collateralTokenAddress, amountToRedeem, address(this), msg.sender);
 
             _revertIfHealthFactorIsBroken(msg.sender);
     }
@@ -262,19 +284,35 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         nonZeroAmount(amountToBeBurned)
         nonReentrant
     {
-        s_DSCMintedByUser[msg.sender]-= amountToBeBurned;
+        _burnDSC(amountToBeBurned, msg.sender, msg.sender);
         _revertIfHealthFactorIsBroken(msg.sender);
-
-        bool success = i_dsc.transferFrom(msg.sender, address(this), amountToBeBurned);
-        require (success, DSCEngine__transferFailed());
-
-        i_dsc.burn(amountToBeBurned);
     }
 
     
     ////////////////////////
     // Private & Internal //
     ////////////////////////
+
+        /**
+         * @dev low-level internal function: _burnDSC, do not call unless function calling it checks for brokenHealthFactor.
+         * @param onBehalfOf: Decrease the internal debt record of the user at address onBehalfOf.
+         * @param dscFrom: take the tokens from addres dscFrom
+         * @notice why transfer to on behalf of? 
+         * so that the dsc engine can burn the tokens from the debtor's address.
+         * i_dsc.burn(amountDscToBurn) removes the existence of the tokens from the blockchain.
+         */
+
+    function _burnDSC(uint256 amountDSCToBurn, address onBehalfOf, address dscFrom) private {
+        s_DSCMintedByUser[onBehalfOf]-= amountDSCToBurn;
+        // _revertIfHealthFactorIsBroken(msg.sender);
+        // omitted here since burning debt improves health factor anyway
+
+        bool success = i_dsc.transferFrom(dscFrom, onBehalfOf, amountDSCToBurn);
+        require (success, DSCEngine__transferFailed());
+
+        i_dsc.burn(amountDSCToBurn);
+    }
+
 
     function _getAccountInformation(address user) private view returns (uint256, uint256) {
         return (
