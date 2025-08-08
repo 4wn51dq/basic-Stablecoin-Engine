@@ -12,6 +12,8 @@ import {Ownable} from "../lib/openzeppelin-contracts/contracts/access/Ownable.so
  *
  * this contract is to be governed by DSCEngine. ERC20 implementation on our stablecoin system.
  * 
+ * @dev ERC20Burnable is an extension contract for ERC20 that allows users to destroy tokens (owned and 
+ * the one for which they have allowance)
  */
 
 contract DecentralizedStablecoin is ERC20Burnable, Ownable {
@@ -22,6 +24,11 @@ contract DecentralizedStablecoin is ERC20Burnable, Ownable {
     constructor() ERC20("Decentralized stablecoin", "DSC") Ownable(msg.sender){
         
     }
+    /**
+     * @dev mint function returns bool to match the behaviour of transfer and transferFrom (creates a _amount number 
+     * of tokens and transfers it from address(0)), while the burn function does return bool because it follows the 
+     * OpenZeppelin convention where internal or trust-required actions just revert instead of returning false.
+     */
 
     function burn(uint256 _amount) public override onlyOwner {
         uint256 balance = balanceOf(msg.sender);

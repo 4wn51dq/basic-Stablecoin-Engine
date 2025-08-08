@@ -230,6 +230,10 @@ contract DSCEngine is IDSCEngine, EngineErrors, EngineEvents, ReentrancyGuard {
         );
     }
 
+    function getAccountInformation(address user) external view returns (uint256, uint256){
+        return _getAccountInformation(user);
+    }
+
 
     function mintDSCByCollateral(
         address collateralTokenAddress,
